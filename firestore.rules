@@ -10,13 +10,28 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email == 'giuseppedeiana.info@gmail.com' && 
+             request.auth.token.email_verified == true;
+    }
     
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return isSignedIn() && (request.auth.uid == userId || isAdmin());
     }
 
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Authorized Emails Rules
+    match /authorized_emails/{email} {
+      allow read, write: if isAdmin();
+    }
+
+    function isAuthorizedUser() {
+      return isAdmin() || exists(/databases/$(database)/documents/authorized_emails/$(request.auth.token.email));
     }
 
     function incoming() {
@@ -37,6 +52,7 @@ service cloud.firestore {
       }
 
       allow get: if isOwner(userId);
+      allow list: if isAdmin();
       allow create: if isOwner(userId) && isValidUser(incoming());
       allow update: if isOwner(userId) && isValidUser(incoming()) 
                      && incoming().uid == existing().uid
@@ -46,18 +62,18 @@ service cloud.firestore {
     // History Rules
     match /users/{userId}/history/{analysisId} {
       function isValidAnalysis(data) {
-        return data.userId == request.auth.uid
+        return (data.userId == request.auth.uid || isAdmin())
             && data.name is string && data.name.size() > 0 && data.name.size() < 500
             && data.url is string && data.url.size() > 0 && data.url.size() < 2048
             && data.result is string && data.result.size() > 0
             && data.timestamp is number;
       }
 
-      allow list: if isOwner(userId);
-      allow get: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidAnalysis(incoming()) && isValidId(analysisId);
-      allow update: if isOwner(userId) && isValidAnalysis(incoming())
-                     && incoming().userId == existing().userId
+      allow list: if isOwner(userId) && isAuthorizedUser();
+      allow get: if isOwner(userId) && isAuthorizedUser();
+      allow create: if isOwner(userId) && isAuthorizedUser() && isValidAnalysis(incoming()) && isValidId(analysisId);
+      allow update: if isOwner(userId) && isAuthorizedUser() && isValidAnalysis(incoming())
+                     && (incoming().userId == existing().userId || isAdmin())
                      && incoming().diff(existing()).affectedKeys().hasOnly(['name']);
       allow delete: if isOwner(userId);
     }

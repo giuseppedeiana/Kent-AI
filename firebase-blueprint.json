@@ -25,6 +25,16 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "name", "url", "result", "timestamp"]
+    },
+    "AuthorizedEmail": {
+      "title": "Authorized Email",
+      "description": "Emails allowed to access the platform",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "addedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email"]
     }
   },
   "firestore": {
@@ -35,6 +45,10 @@
     "users/{userId}/history/{analysisId}": {
       "schema": "Analysis",
       "description": "User's history of analyses"
+    },
+    "authorized_emails/{emailId}": {
+      "schema": "AuthorizedEmail",
+      "description": "List of emails permitted to sign up/in"
     }
   }
 }
