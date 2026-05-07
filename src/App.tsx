@@ -519,7 +519,7 @@ export default function App() {
                   <div className="mt-12 flex items-center gap-8 text-xs font-bold text-slate-400 uppercase tracking-widest leading-none">
                     <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-indigo-500" /> Claim Free</span>
                     <span className="flex items-center gap-2"><Plus className="w-4 h-4 text-emerald-500" /> COSMO Optimized</span>
-                    <span className="flex items-center gap-2"><History className="w-4 h-4 text-amber-500" /> Persistent History</span>
+                    <span className="flex items-center gap-2"><History className="w-4 h-4 text-amber-500" /> Rufus Ready</span>
                   </div>
                 </motion.div>
               ) : (
