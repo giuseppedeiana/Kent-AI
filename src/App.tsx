@@ -422,7 +422,7 @@ export default function App() {
           <div className="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-indigo-200 shadow-lg">
             <BarChart className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Listing AI</h1>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">Kentai Pro</h1>
           <p className="text-slate-500 mb-8 leading-relaxed">
             Boost your Amazon sales with AI-powered SEO and intent optimization. Sign in to start your analysis.
           </p>
@@ -608,7 +608,7 @@ export default function App() {
               <div className="bg-indigo-600 p-1.5 rounded-xl shadow-lg shadow-indigo-100">
                 <BarChart className="w-5 h-5 text-white" />
               </div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 hidden sm:block">Listing AI</h1>
+              <h1 className="text-xl font-bold tracking-tight text-slate-900 hidden sm:block">Kentai Pro</h1>
             </div>
           </div>
           
