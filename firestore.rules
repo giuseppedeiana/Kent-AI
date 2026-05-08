@@ -30,6 +30,12 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Inquiries Rules
+    match /inquiries/{inquiryId} {
+      allow create: if true;
+      allow read, delete: if isAdmin();
+    }
+
     function isAuthorizedUser() {
       return isAdmin() || exists(/databases/$(database)/documents/authorized_emails/$(request.auth.token.email));
     }

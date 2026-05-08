@@ -17,7 +17,12 @@ import {
   Clock,
   LogOut,
   User as UserIcon,
-  ShieldCheck
+  ShieldCheck,
+  ArrowRight,
+  X,
+  Phone,
+  Building2,
+  Mail
 } from 'lucide-react';
 
 // Firebase imports
@@ -114,10 +119,24 @@ export default function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showLogin, setShowLogin] = useState(false);
+  const [showInquiryModal, setShowInquiryModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  
+  // Inquiry Form State
+  const [inquiryForm, setInquiryForm] = useState({
+    email: '',
+    company: '',
+    phone: ''
+  });
+  const [inquiryLoading, setInquiryLoading] = useState(false);
+  const [inquirySuccess, setInquirySuccess] = useState(false);
   
   // Admin State
   const [view, setView] = useState<'app' | 'admin'>('app');
   const [authorizedEmails, setAuthorizedEmails] = useState<{id: string, email: string}[]>([]);
+  const [allInquiries, setAllInquiries] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [newEmail, setNewEmail] = useState('');
   const [adminLoading, setAdminLoading] = useState(false);
@@ -178,9 +197,16 @@ export default function App() {
       setAllUsers(snap.docs.map(doc => doc.data()));
     });
 
+    // Sync Inquiries
+    const inquiriesRef = collection(db, 'inquiries');
+    const unsubInquiries = onSnapshot(query(inquiriesRef, orderBy('timestamp', 'desc')), (snap) => {
+      setAllInquiries(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
     return () => {
       unsubEmails();
       unsubUsers();
+      unsubInquiries();
     };
   }, [isAdmin, view]);
 
@@ -355,6 +381,45 @@ export default function App() {
     }
   };
 
+  const handleInquirySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInquiryLoading(true);
+    try {
+      // 1. Save to Firestore for the dashboard
+      await addDoc(collection(db, 'inquiries'), {
+        ...inquiryForm,
+        timestamp: new Date().toISOString()
+      });
+
+      // 2. Trigger email notification via server API
+      await fetch('/api/inquiry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(inquiryForm)
+      });
+
+      setInquirySuccess(true);
+      setTimeout(() => {
+        setShowInquiryModal(false);
+        setInquirySuccess(false);
+        setInquiryForm({ email: '', company: '', phone: '' });
+      }, 3000);
+    } catch (err) {
+      console.error("Inquiry failed", err);
+    } finally {
+      setInquiryLoading(false);
+    }
+  };
+
+  const deleteInquiry = async (id: string) => {
+    if (!isAdmin) return;
+    try {
+      await deleteDoc(doc(db, 'inquiries', id));
+    } catch (err) {
+      console.error("Failed to delete inquiry", err);
+    }
+  };
+
   const removeAuthorizedEmail = async (email: string) => {
     if (!isAdmin) return;
     try {
@@ -412,32 +477,347 @@ export default function App() {
   }
 
   if (!user) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-white p-8 rounded-3xl shadow-xl border border-slate-200 max-w-md w-full text-center"
-        >
-          <div className="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-indigo-200 shadow-lg">
-            <BarChart className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Kentai Pro</h1>
-          <p className="text-slate-500 mb-8 leading-relaxed">
-            Boost your Amazon sales with AI-powered SEO and intent optimization. Sign in to start your analysis.
-          </p>
-          <button
-            onClick={login}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold py-4 px-6 border-2 border-slate-100 rounded-2xl transition-all hover:shadow-md active:scale-[0.98]"
+    if (showLogin) {
+      return (
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+          <button 
+            onClick={() => setShowLogin(false)}
+            className="absolute top-8 left-8 flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors"
           >
-            <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-            Sign in with Google
+            <ArrowRight className="w-4 h-4 rotate-180" />
+            Back to Home
           </button>
-          <div className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium uppercase tracking-wider">
-            <ShieldCheck className="w-4 h-4" />
-            Secure & Private
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white p-8 rounded-3xl shadow-xl border border-slate-200 max-w-md w-full text-center"
+          >
+            <div className="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-indigo-200 shadow-lg">
+              <BarChart className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">Kentai Pro</h1>
+            <p className="text-slate-500 mb-8 leading-relaxed">
+              This is Private Access. Please enter your invitation password to continue.
+            </p>
+
+            {!isUnlocked ? (
+              <div className="space-y-4">
+                <input 
+                  type="password"
+                  placeholder="Enter Password..."
+                  value={passwordInput}
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    if (e.target.value === 'Ask-Kent!') {
+                      setIsUnlocked(true);
+                    }
+                  }}
+                  className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-indigo-500 outline-none font-bold text-center tracking-[0.2em] transition-all"
+                />
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Invite Only Access
+                </p>
+              </div>
+            ) : (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-4"
+              >
+                <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center justify-center gap-2 text-emerald-600 text-sm font-bold mb-4">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Access Granted
+                </div>
+                <button
+                  onClick={login}
+                  className="w-full flex items-center justify-center gap-3 bg-white hover:bg-indigo-600 hover:text-white text-slate-700 font-bold py-4 px-6 border-2 border-slate-100 hover:border-indigo-600 rounded-2xl transition-all hover:shadow-lg active:scale-[0.98]"
+                >
+                  <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5 bg-white p-0.5 rounded-full" />
+                  Sign in with Google
+                </button>
+              </motion.div>
+            )}
+
+            <div className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium uppercase tracking-wider">
+              <ShieldCheck className="w-4 h-4" />
+              Secure & Private
+            </div>
+          </motion.div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-white text-slate-900 selection:bg-indigo-50">
+        {/* Navigation */}
+        <nav className="max-w-7xl mx-auto px-6 py-8 flex justify-between items-center sticky top-0 bg-white/80 backdrop-blur-md z-50">
+          <div className="flex items-center gap-2.5">
+            <div className="bg-indigo-600 p-2 rounded-xl shadow-lg shadow-indigo-100">
+              <BarChart className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-2xl font-black text-slate-900 tracking-tight">Kentai Pro</span>
           </div>
-        </motion.div>
+          <div className="flex items-center gap-8">
+            <button 
+              onClick={() => setShowLogin(true)} 
+              className="hidden sm:block text-[15px] font-bold text-slate-600 hover:text-indigo-600 transition-colors"
+            >
+              Log in
+            </button>
+            <button 
+              onClick={() => setShowInquiryModal(true)}
+              className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold text-[15px] hover:bg-indigo-600 transition-all shadow-lg active:scale-95"
+            >
+              Get Started
+            </button>
+          </div>
+        </nav>
+
+        {/* Hero Section */}
+        <header className="max-w-7xl mx-auto px-6 py-16 md:py-32 text-center lg:text-left grid lg:grid-cols-2 gap-16 items-center">
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-full text-sm font-extrabold uppercase tracking-widest mb-8">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-600"></span>
+              </span>
+              Engineered for Rufus & COSMO
+            </div>
+            <h1 className="text-6xl md:text-8xl font-black text-slate-900 leading-[0.9] tracking-tight mb-8">
+              Sell More with <br/> <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-indigo-400">Contextual</span> AI.
+            </h1>
+            <p className="text-xl text-slate-500 max-w-xl leading-relaxed mb-12">
+              The first Amazon optimization tool built for the age of conversational search. Dominate Rufus and COSMO with intent-driven listings.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button 
+                onClick={() => setShowInquiryModal(true)}
+                className="bg-indigo-600 text-white px-10 py-5 rounded-[1.5rem] font-black text-lg hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-100 flex items-center justify-center gap-3 group"
+              >
+                Join for Private Access <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </button>
+              <div className="flex items-center gap-4 px-6 py-5 border-2 border-slate-50 rounded-[1.5rem]">
+                <div className="flex -space-x-3">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="w-10 h-10 rounded-full border-4 border-white bg-slate-100 overflow-hidden">
+                      <img src={`https://i.pravatar.cc/100?img=${i+10}`} alt="user" className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+                <div className="text-left">
+                  <div className="flex gap-0.5 text-amber-400">
+                    {[1, 2, 3, 4, 5].map(i => <Plus key={i} className="w-3 h-3 fill-current" />)}
+                  </div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">100+ Trusted Sellers</p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Visual Element */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="relative"
+          >
+            <div className="bg-indigo-600 p-8 rounded-[3rem] shadow-2xl shadow-indigo-200 transform rotate-3 hover:rotate-0 transition-transform duration-700">
+               <div className="bg-white rounded-[2rem] p-6 space-y-6">
+                 <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center">
+                      <Search className="w-6 h-6 text-indigo-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-slate-900">Analysis Pipeline</h4>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Real-time processing</p>
+                    </div>
+                 </div>
+                 <div className="space-y-3">
+                    <div className="h-4 bg-slate-50 rounded-full w-[80%]" />
+                    <div className="h-4 bg-indigo-50 rounded-full w-[100%]" />
+                    <div className="h-4 bg-slate-50 rounded-full w-[60%]" />
+                 </div>
+                 <div className="pt-6">
+                    <div className="flex items-center justify-between mb-2">
+                       <span className="text-sm font-bold text-slate-600">COSMO Integrity</span>
+                       <span className="text-sm font-black text-emerald-500 underline">98% OPTIMIZED</span>
+                    </div>
+                 </div>
+               </div>
+            </div>
+            <div className="absolute -bottom-10 -right-10 bg-white p-6 rounded-3xl shadow-xl border border-slate-100 max-w-[200px] hidden md:block">
+              <TrendingUp className="w-10 h-10 text-emerald-500 mb-4" />
+              <p className="text-sm font-bold text-slate-900 leading-tight">Average 32% increase in CTR</p>
+            </div>
+          </motion.div>
+        </header>
+
+        {/* Features Split */}
+        <section className="bg-slate-50 py-32">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="text-center mb-20">
+               <h2 className="text-4xl font-black text-slate-900 mb-4">Master the New Amazon</h2>
+               <p className="text-slate-500 font-medium">Every tool you need to stay ahead of the Rufus rollout.</p>
+            </div>
+            <div className="grid md:grid-cols-3 gap-12">
+              {[
+                { 
+                  icon: <CheckCircle2 className="w-8 h-8 text-indigo-600" />, 
+                  title: "Rufus Readiness", 
+                  desc: "Optimized for conversational AI queries to win the 'Recommended' badge."
+                },
+                { 
+                  icon: <TrendingUp className="w-8 h-8 text-indigo-600" />, 
+                  title: "COSMO Core", 
+                  desc: "Context-aware listing generation that aligns with actual shopper intent."
+                },
+                { 
+                  icon: <ShieldCheck className="w-8 h-8 text-indigo-600" />, 
+                  title: "Claim Protection", 
+                  desc: "Fully compliant listings. We filter medical and subjective claims automatically."
+                }
+              ].map((f, i) => (
+                <div key={i} className="p-10 bg-white rounded-3xl border border-slate-100 hover:shadow-xl hover:-translate-y-2 transition-all duration-500">
+                  <div className="mb-6">{f.icon}</div>
+                  <h3 className="text-xl font-bold text-slate-900 mb-4">{f.title}</h3>
+                  <p className="text-slate-500 leading-relaxed font-medium">{f.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="max-w-7xl mx-auto px-6 py-12 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-8">
+          <div className="flex items-center gap-2 grayscale hover:grayscale-0 transition-all opacity-50">
+            <BarChart className="w-5 h-5" />
+            <span className="text-sm font-black tracking-tight">Kentai Pro</span>
+          </div>
+          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">© 2026 Developed by Sellers for Sellers</p>
+          <div className="flex gap-6">
+            <button onClick={() => setShowLogin(true)} className="text-sm font-bold text-slate-500 hover:underline underline-offset-4 decoration-indigo-500 decoration-2">Terms</button>
+            <button onClick={() => setShowLogin(true)} className="text-sm font-bold text-slate-500 hover:underline underline-offset-4 decoration-indigo-500 decoration-2">Privacy</button>
+          </div>
+        </footer>
+
+        {/* Inquiry Modal */}
+        <AnimatePresence>
+          {showInquiryModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowInquiryModal(false)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden"
+              >
+                <div className="p-8 sm:p-12">
+                  <div className="flex justify-between items-start mb-8">
+                    <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-100">
+                      <BarChart className="w-6 h-6 text-white" />
+                    </div>
+                    <button 
+                      onClick={() => setShowInquiryModal(false)}
+                      className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-colors"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+
+                  {inquirySuccess ? (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="text-center py-12"
+                    >
+                      <div className="w-20 h-20 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                        <CheckCircle2 className="w-10 h-10 text-emerald-600" />
+                      </div>
+                      <h3 className="text-3xl font-black text-slate-900 mb-4">Request Sent!</h3>
+                      <p className="text-slate-500 font-medium">We've received your inquiry. One of our experts will contact you shortly.</p>
+                    </motion.div>
+                  ) : (
+                    <>
+                      <h2 className="text-4xl font-black text-slate-900 mb-2 tracking-tight">Get Started</h2>
+                      <p className="text-slate-500 font-medium mb-10 leading-relaxed">
+                        Complete the form below to request Private Access to Kentai Pro.
+                      </p>
+
+                      <form onSubmit={handleInquirySubmit} className="space-y-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Business Email</label>
+                          <div className="relative">
+                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                            <input 
+                              required
+                              type="email"
+                              value={inquiryForm.email}
+                              onChange={e => setInquiryForm({...inquiryForm, email: e.target.value})}
+                              placeholder="name@company.com"
+                              className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-2xl focus:border-indigo-500 focus:bg-white transition-all outline-none font-semibold text-slate-900"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Company / Full Name</label>
+                          <div className="relative">
+                            <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                            <input 
+                              required
+                              type="text"
+                              value={inquiryForm.company}
+                              onChange={e => setInquiryForm({...inquiryForm, company: e.target.value})}
+                              placeholder="Acme Inc."
+                              className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-2xl focus:border-indigo-500 focus:bg-white transition-all outline-none font-semibold text-slate-900"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Telephone Number</label>
+                          <div className="relative">
+                            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                            <input 
+                              required
+                              type="tel"
+                              value={inquiryForm.phone}
+                              onChange={e => setInquiryForm({...inquiryForm, phone: e.target.value})}
+                              placeholder="+1 (555) 000-0000"
+                              className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-transparent rounded-2xl focus:border-indigo-500 focus:bg-white transition-all outline-none font-semibold text-slate-900"
+                            />
+                          </div>
+                        </div>
+
+                        <button 
+                          disabled={inquiryLoading}
+                          type="submit"
+                          className="w-full bg-slate-900 hover:bg-indigo-600 text-white font-black py-5 rounded-2xl transition-all shadow-xl shadow-slate-200 mt-6 flex items-center justify-center gap-3 disabled:opacity-50"
+                        >
+                          {inquiryLoading ? (
+                            <Loader2 className="w-6 h-6 animate-spin" />
+                          ) : (
+                            <>Submit Request <ArrowRight className="w-5 h-5" /></>
+                          )}
+                        </button>
+                      </form>
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -485,6 +865,31 @@ export default function App() {
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
+                      </div>
+                    ))}
+                  </div>
+               </div>
+
+               <div>
+                  <h3 className="text-sm font-bold text-slate-900 mb-2">Inquiries</h3>
+                  <div className="space-y-2">
+                    {allInquiries.map(i => (
+                      <div key={i.id} className="bg-slate-50 p-3 rounded-xl text-[10px] space-y-1 border border-slate-100">
+                         <div className="flex justify-between items-start">
+                           <span className="font-bold text-slate-900">{i.company}</span>
+                           <button 
+                            onClick={() => deleteInquiry(i.id)}
+                            className="text-slate-300 hover:text-red-500"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                         </div>
+                         <div className="flex items-center gap-2 text-slate-500">
+                           <Mail className="w-2.5 h-2.5" /> {i.email}
+                         </div>
+                         <div className="flex items-center gap-2 text-slate-500">
+                           <Phone className="w-2.5 h-2.5" /> {i.phone}
+                         </div>
                       </div>
                     ))}
                   </div>
@@ -716,6 +1121,47 @@ export default function App() {
                             ))}
                           </tbody>
                         </table>
+                     </div>
+                  </div>
+
+                  <div className="bg-white rounded-3xl shadow-xl shadow-slate-100 border border-slate-100 p-8">
+                     <h3 className="text-xl font-bold text-slate-900 mb-6">Recent Inquiries ({allInquiries.length})</h3>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {allInquiries.map(i => (
+                          <div key={i.id} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 group relative">
+                             <div className="flex items-start justify-between mb-4">
+                                <div>
+                                   <h4 className="font-bold text-slate-900">{i.company}</h4>
+                                   <p className="text-xs text-slate-400">{new Date(i.timestamp).toLocaleString()}</p>
+                                </div>
+                                <button 
+                                  onClick={() => deleteInquiry(i.id)}
+                                  className="p-2 hover:bg-red-50 rounded-xl text-slate-300 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                             </div>
+                             <div className="space-y-2">
+                                <div className="flex items-center gap-3 text-sm text-slate-600">
+                                   <Mail className="w-4 h-4 text-indigo-400" />
+                                   {i.email}
+                                </div>
+                                <div className="flex items-center gap-3 text-sm text-slate-600">
+                                   <Phone className="w-4 h-4 text-indigo-400" />
+                                   {i.phone}
+                                </div>
+                             </div>
+                             <button 
+                              onClick={() => {
+                                setNewEmail(i.email);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                              className="mt-4 w-full bg-white border border-slate-200 hover:border-indigo-600 hover:text-indigo-600 text-slate-500 py-2 rounded-xl text-xs font-bold transition-all"
+                             >
+                               Copy Email to Add
+                             </button>
+                          </div>
+                        ))}
                      </div>
                   </div>
                 </motion.div>
